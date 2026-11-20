@@ -1,0 +1,143 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#000"><title>FTPFlix</title>
+<style>
+:root{--bg:#0b0b0f;--fg:#f2f2f2;--mu:#8b8b99;--cd:#17171f;--ac:#e50914;--w:150px;--r:10px}
+body.light{--bg:#f5f5f7;--fg:#111;--mu:#666;--cd:#e6e6ec}
+body.amoled{--bg:#000;--cd:#101010}
+body.s{--w:120px}body.l{--w:200px}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;padding:10px 4vw;background:linear-gradient(var(--bg),transparent);backdrop-filter:blur(8px);flex-wrap:wrap}
+header h1{font-size:20px;color:var(--ac);letter-spacing:1px;margin-right:6px}
+nav{display:flex;gap:4px;flex:1}
+button,select,input{font:inherit;color:inherit;background:var(--cd);border:2px solid transparent;border-radius:8px;padding:8px 12px}
+button{cursor:pointer}
+nav button{background:none}nav button.on{background:var(--cd);border-color:var(--ac)}
+.pri{background:var(--ac);color:#fff}
+:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+main{padding:0 4vw 60px}
+h2{font-size:17px;margin:22px 0 10px}h2 small{color:var(--mu);font-weight:400;margin-left:8px}
+.row{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity;scrollbar-width:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--w),1fr));gap:14px}
+.c{flex:none;width:var(--w);cursor:pointer;scroll-snap-align:start;border-radius:var(--r);transition:transform .15s}
+.grid .c{width:auto}
+.c:hover,.c:focus-visible{transform:scale(1.05)}
+.p{aspect-ratio:2/3;border-radius:var(--r);background:linear-gradient(160deg,hsl(var(--h) 60% 35%),hsl(calc(var(--h) + 50) 60% 14%));display:grid;place-items:center;position:relative;overflow:hidden}
+.p img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.p b{font-size:48px;opacity:.85}.p i{position:absolute;right:8px;bottom:6px;font-style:normal}
+.p u{position:absolute;left:0;bottom:0;height:4px;background:var(--ac)}
+.c span{display:block;margin-top:6px;font-size:13px;line-height:1.3;max-height:2.6em;overflow:hidden}
+.list .c{display:flex;width:100%;gap:12px;align-items:center;background:var(--cd);padding:8px}
+.list .p{width:44px;aspect-ratio:1}.list .p b{font-size:20px}.list .c span{margin:0;max-height:none}
+.list{display:flex;flex-direction:column;gap:6px}
+.mu{color:var(--mu)}.err{padding:14px;background:var(--cd);border-radius:var(--r);color:var(--mu);font-size:13px}
+.crumb{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0;align-items:center}
+.f{display:flex;flex-direction:column;gap:12px;max-width:560px}.f label{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.it{display:flex;justify-content:space-between;background:var(--cd);padding:10px 12px;border-radius:8px;margin:6px 0;gap:8px}
+#pl{position:fixed;inset:0;background:#000;z-index:20;display:none}#pl.on{display:block}
+#pl video{width:100%;height:100%;background:#000}
+#bar{position:absolute;top:0;left:0;right:0;padding:10px;display:flex;gap:8px;align-items:center;background:linear-gradient(#000a,transparent);color:#fff;transition:opacity .3s;z-index:2}
+#bar.h{opacity:0;pointer-events:none}
+#bar span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#sh{position:fixed;inset:0;z-index:30;background:#000a;display:none;align-items:flex-end;justify-content:center}
+#sh.on{display:flex}
+#sh div{background:var(--bg);width:min(560px,100%);max-height:80vh;overflow:auto;padding:14px;border-radius:16px 16px 0 0}
+#sh button{display:block;width:100%;text-align:left;margin:5px 0}
+</style></head><body>
+<header><h1>FTPFLIX</h1><nav id="nv"></nav><input id="q" type="search" placeholder="Search…" style="min-width:120px;flex:1;max-width:260px"></header>
+<main id="m"></main>
+<div id="pl"><div id="bar"><button id="bk">←</button><span id="tt"></span><select id="sp"><option>0.5</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select><button id="sb">CC</button><button id="nx">⏭</button><button id="ex">External ⤴</button></div><video id="v" controls playsinline></video></div>
+<div id="sh"><div id="shb"></div></div>
+<input id="sf" type="file" accept=".srt,.vtt" hidden>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+let S;try{S=JSON.parse(localStorage.ftpflix)}catch(e){}
+S=Object.assign({src:[],add:[],set:{theme:'dark',accent:'#e50914',layout:'rows',size:'m'},rec:{},fav:[]},S||{});
+const save=()=>{try{localStorage.ftpflix=JSON.stringify(S)}catch(e){}};
+const VID=/\.(mkv|mp4|avi|webm|mov|m4v|ts|wmv|flv|mpg|mpeg|3gp|ogv)$/i,SUB=/\.(srt|vtt)$/i,cache={};
+let view='home',nav=[],cur=null,sibs=[];
+const hue=s=>[...s].reduce((a,c)=>a*31+c.charCodeAt(0)|0,7)%360&&Math.abs([...s].reduce((a,c)=>a*31+c.charCodeAt(0)|0,7))%360;
+const clean=n=>n.replace(/\.[a-z0-9]{2,4}$/i,'').replace(/[._]+/g,' ').replace(/\b(1080p|720p|480p|2160p|4k|bluray|brrip|webrip|web-dl|x264|x265|hevc|hdrip).*$/i,'').trim()||n;
+function theme(){document.body.className=[S.set.theme,S.set.size].join(' ');document.documentElement.style.setProperty('--ac',S.set.accent)}
+async function list(u){if(cache[u])return cache[u];const r=await fetch(u);if(!r.ok)throw Error(r.status);const d=new DOMParser().parseFromString(await r.text(),'text/html'),o=[],seen={};
+ for(const a of d.querySelectorAll('a[href]')){const h=a.getAttribute('href');if(!h||/^[?#]/.test(h))continue;let x;try{x=new URL(h,u)}catch(e){continue}
+  if(!x.href.startsWith(u)||x.href==u||seen[x.href])continue;seen[x.href]=1;const dir=/\/$/.test(x.pathname);
+  let n=x.pathname.split('/').filter(Boolean).pop()||'';try{n=decodeURIComponent(n)}catch(e){}
+  if(dir||VID.test(n)||SUB.test(n))o.push({n,href:x.href,dir})}
+ o.sort((a,b)=>b.dir-a.dir||a.n.localeCompare(b.n,0,{numeric:true}));return cache[u]=o}
+function card(e,img){const pr=S.rec[e.href],pc=pr&&pr.d?Math.min(100,pr.t/pr.d*100):0;
+ return `<div class="c" tabindex="0" data-u="${esc(e.href)}" data-d="${e.dir?1:0}" data-n="${esc(e.n)}" style="--h:${hue(e.n)}"><div class="p">${img?`<img loading="lazy" src="${esc(img)}" alt="">`:`<b>${esc(clean(e.n)[0]||'?').toUpperCase()}</b>`}<i>${e.dir?'📁':'▶'}</i>${pc?`<u style="width:${pc}%"></u>`:''}</div><span>${esc(clean(e.n))}</span></div>`}
+const wrap=h=>S.set.layout=='rows'?`<div class="row">${h}</div>`:`<div class="${S.set.layout=='list'?'list':'grid'}">${h}</div>`;
+function tabs(){$('#nv').innerHTML=[['home','Home'],['addons','Add-ons'],['settings','Settings']].map(([k,l])=>`<button data-v="${k}" class="${view==k||(k=='home'&&view=='browse')?'on':''}">${l}</button>`).join('')}
+async function fill(el,url,pre){try{const l=await list(url);el.innerHTML=l.filter(e=>!SUB.test(e.n)).length?wrap(l.filter(e=>!SUB.test(e.n)).map(e=>card(e)).join('')):'<div class="err">Empty folder.</div>'}catch(e){el.innerHTML=`<div class="err">Could not load this server (${esc(e.message)}). Check the URL, that you're on the right network, and that the server allows cross-origin reads (CORS). Use “External ⤴” on direct video links meanwhile.</div>`}}
+function render(){tabs();const m=$('#m');m.scrollTo&&0;
+ if(view=='home'){let h='';const rc=Object.entries(S.rec).filter(([k,v])=>v.t>5&&!v.done).sort((a,b)=>b[1].at-a[1].at).slice(0,15);
+  if(rc.length)h+=`<h2>Continue watching</h2>${wrap(rc.map(([k,v])=>card({n:v.n,href:k})).join(''))}`;
+  if(S.fav.length)h+=`<h2>My list</h2>${wrap(S.fav.map(f=>card(f)).join(''))}`;
+  if(!S.src.length)h+=`<div class="err" style="margin-top:20px">No servers yet. Open <b>Settings</b> → add your FTP/HTTP server link (e.g. the http:// address of your local media server).</div>`;
+  S.src.forEach((s,i)=>h+=`<h2>${esc(s.name)} <small class="mu" data-open="${i}" tabindex="0" style="cursor:pointer">Browse all ›</small></h2><div id="s${i}" class="mu">Loading…</div>`);
+  m.innerHTML=h;S.src.forEach((s,i)=>fill($('#s'+i),s.url))}
+ else if(view=='browse'){const u=nav[nav.length-1];m.innerHTML=`<div class="crumb"><button data-up="1">← Back</button><b>${esc(clean(decodeURIComponent(u.replace(/\/$/,'').split('/').pop())))}</b></div><div id="bl" class="mu">Loading…</div>`;
+  list(u).then(l=>{sibs=l;const sh=l.filter(e=>!SUB.test(e.n));$('#bl').innerHTML=sh.length?`<div class="${S.set.layout=='list'?'list':'grid'}">${sh.map(e=>card(e)).join('')}</div>`:'<div class="err">Empty folder.</div>';$('#bl').className='';flt()}).catch(e=>fill($('#bl'),u))}
+ else if(view=='addons'){m.innerHTML=`<h2>Stremio-style add-ons</h2><p class="mu">Paste an add-on manifest link (ends with manifest.json).</p><div class="crumb"><input id="au" placeholder="https://…/manifest.json" style="flex:1"><button class="pri" data-addadd="1">Add</button></div><div id="al"></div>`+S.add.map((a,i)=>`<h2>${esc(a.name)} <small class="mu" data-rm-add="${i}" tabindex="0" style="cursor:pointer">remove</small></h2>${a.cats.map((c,j)=>`<div class="mu" style="margin:6px 0">${esc(c.name||c.id)} (${c.type})</div><div id="a${i}_${j}" class="mu">Loading…</div>`).join('')}`).join('')+`<p class="mu" style="margin-top:24px">Note: Cloudstream plugins are native Android code and can't run inside a web app; Stremio add-ons (plain HTTP/JSON) can.</p>`;
+  S.add.forEach((a,i)=>a.cats.forEach(async(c,j)=>{const el=$(`#a${i}_${j}`);try{const r=await(await fetch(`${a.base}/catalog/${c.type}/${c.id}.json`)).json();el.className='';el.innerHTML=wrap(r.metas.slice(0,30).map(x=>`<div class="c" tabindex="0" data-ao="${i}|${c.type}|${esc(x.id)}|${esc(x.name)}" style="--h:${hue(x.name)}"><div class="p">${x.poster?`<img loading="lazy" src="${esc(x.poster)}" alt="">`:'<b>'+esc(x.name[0])+'</b>'}</div><span>${esc(x.name)}</span></div>`).join(''))}catch(e){el.innerHTML='<div class="err">Catalog unavailable.</div>'}}))}
+ else{const s=S.set;m.innerHTML=`<h2>Servers</h2>${S.src.map((x,i)=>`<div class="it"><span>${esc(x.name)}<br><small class="mu">${esc(x.url)}</small></span><button data-rm="${i}">Remove</button></div>`).join('')}<div class="crumb"><input id="sn" placeholder="Name (e.g. Movies)" style="flex:1;min-width:120px"><input id="su" placeholder="http://server/folder/" style="flex:2;min-width:180px"><button class="pri" data-add="1">Add</button></div><p class="mu">Tip: add each category as its own server (Movies, Series, Anime) for tidy rows. Browsers can't speak raw ftp:// — use the server's http:// link.</p>
+  <h2>Interface</h2><div class="f"><label>Theme<select data-s="theme"><option value="dark">Dark</option><option value="amoled">AMOLED black</option><option value="light">Light</option></select></label><label>Layout<select data-s="layout"><option value="rows">Netflix rows</option><option value="grid">Grid</option><option value="list">List</option></select></label><label>Card size<select data-s="size"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large (TV)</option></select></label><label>Accent colour<input type="color" data-s="accent" value="${s.accent}"></label><label>Backup<span><button data-ex="1">Export</button> <button data-im="1">Import</button></span></label></div>`;
+  ['theme','layout','size'].forEach(k=>m.querySelector(`[data-s=${k}]`).value=s[k])}}
+function flt(){const q=$('#q').value.toLowerCase();document.querySelectorAll('.c').forEach(c=>c.style.display=(c.dataset.n||c.textContent).toLowerCase().includes(q)?'':'none')}
+function sheet(t,items){$('#shb').innerHTML=`<h2 style="margin-top:0">${esc(t)}</h2>`+items.map((x,i)=>`<button data-i="${i}">${esc(x[0])}</button>`).join('')+`<button data-i="-1" class="mu">Cancel</button>`;$('#sh').classList.add('on');$('#shb').onclick=e=>{const b=e.target.closest('[data-i]');if(!b)return;$('#sh').classList.remove('on');const i=+b.dataset.i;i>=0&&items[i][1]()}}
+$('#sh').onclick=e=>{if(e.target.id=='sh')$('#sh').classList.remove('on')};
+/* player */
+const V=$('#v');let hid;
+function srt2vtt(t){return'WEBVTT\n\n'+t.replace(/\r/g,'').replace(/(\d+):(\d+):(\d+),(\d+)/g,'$1:$2:$3.$4')}
+function addSub(txt,lbl){const t=document.createElement('track');t.kind='subtitles';t.label=lbl;t.default=true;t.src=URL.createObjectURL(new Blob([txt],{type:'text/vtt'}));V.appendChild(t)}
+async function play(url,name){cur={url,name};$('#tt').textContent=clean(name);V.innerHTML='';V.src=url;$('#pl').classList.add('on');const r=S.rec[url];
+ V.onloadedmetadata=()=>{if(r&&r.t>5&&!r.done&&r.t<V.duration-30)V.currentTime=r.t};V.play().catch(()=>{});V.focus();
+ const base=name.replace(/\.[^.]+$/,'');const sub=sibs.find(e=>SUB.test(e.n)&&e.n.replace(/\.[^.]+$/,'').startsWith(base));
+ if(sub)try{let t=await(await fetch(sub.href)).text();addSub(/\.srt$/i.test(sub.n)?srt2vtt(t):t,'Auto')}catch(e){}
+ bump()}
+function stop(){V.pause();V.removeAttribute('src');V.load();$('#pl').classList.remove('on');render()}
+function bump(){$('#bar').classList.remove('h');clearTimeout(hid);hid=setTimeout(()=>!V.paused&&$('#bar').classList.add('h'),3000)}
+V.ontimeupdate=()=>{if(cur&&V.duration)S.rec[cur.url]={t:V.currentTime,d:V.duration,n:cur.name,at:Date.now(),done:V.currentTime>V.duration-20};if((V.currentTime|0)%10==0)save()};
+V.onended=()=>nextEp();V.onerror=()=>sheet('Can’t play this format in the built-in player (codec/container unsupported by this browser)',ext());
+function nextEp(){const vs=sibs.filter(e=>VID.test(e.n)),i=vs.findIndex(e=>e.href==cur.url);if(vs[i+1])play(vs[i+1].href,vs[i+1].n);else stop()}
+function ext(){const u=cur.url,an=p=>`intent:${u}#Intent;${p?'package='+p+';':''}type=video/*;S.title=${encodeURIComponent(cur.name)};end`;
+ return[['VLC (Android)',()=>location.href=an('org.videolan.vlc')],['MX Player (Android)',()=>location.href=an('com.mxtech.videoplayer.ad')],['Choose any app (Android)',()=>location.href=an('')],['Download .m3u for VLC / PotPlayer / mpv (PC)',()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['#EXTM3U\n#EXTINF:-1,'+cur.name+'\n'+u+'\n'],{type:'audio/x-mpegurl'}));a.download='play.m3u';a.click()}],['Copy stream link',()=>navigator.clipboard&&navigator.clipboard.writeText(u)]]}
+$('#bk').onclick=stop;$('#nx').onclick=nextEp;$('#ex').onclick=()=>{V.pause();sheet('Open in external player',ext())};
+$('#sp').onchange=e=>V.playbackRate=+e.target.value;
+$('#sb').onclick=()=>$('#sf').click();$('#sf').onchange=async e=>{const f=e.target.files[0];if(!f)return;let t=await f.text();addSub(/\.srt$/i.test(f.name)?srt2vtt(t):t,f.name)};
+$('#pl').addEventListener('mousemove',bump);$('#pl').addEventListener('touchstart',bump);
+/* events */
+document.addEventListener('click',async e=>{const t=e.target,g=s=>t.closest(s);let x;
+ if(x=g('[data-v]')){view=x.dataset.v;render()}
+ else if(x=g('.c[data-u]')){const u=x.dataset.u;if(x.dataset.d=='1'){nav.push(u);view='browse';render();scrollTo(0,0)}else{if(view=='home'){try{const p=u.replace(/[^/]+$/,'');sibs=await list(p)}catch(e){sibs=[]}}play(u,x.dataset.n||S.rec[u]?.n||decodeURIComponent(u.split('/').pop()))}}
+ else if(x=g('[data-up]')){nav.pop();if(nav.length)render();else{view='home';render()}}
+ else if(x=g('[data-open]')){nav=[S.src[x.dataset.open].url];view='browse';render()}
+ else if(x=g('[data-add]')){let u=$('#su').value.trim(),n=$('#sn').value.trim();if(!/^https?:\/\//.test(u))return alert('Enter an http(s):// link');if(!u.endsWith('/'))u+='/';S.src.push({name:n||new URL(u).hostname,url:u});save();render()}
+ else if(x=g('[data-rm]')){S.src.splice(x.dataset.rm,1);save();render()}
+ else if(x=g('[data-addadd]')){const u=$('#au').value.trim();try{const mf=await(await fetch(u)).json();S.add.push({name:mf.name||'Add-on',base:u.replace(/\/manifest\.json.*$/,''),cats:(mf.catalogs||[]).filter(c=>!(c.extra||[]).some(z=>z.isRequired)).slice(0,6)});save();render()}catch(er){$('#al').innerHTML='<div class="err">Couldn’t read that manifest (bad link or CORS).</div>'}}
+ else if(x=g('[data-rm-add]')){S.add.splice(x.dataset.rmAdd,1);save();render()}
+ else if(x=g('[data-ao]')){const[i,ty,id,nm]=x.dataset.ao.split('|'),a=S.add[i];const streams=async(tp,vid,lbl)=>{try{const r=await(await fetch(`${a.base}/stream/${tp}/${encodeURIComponent(vid)}.json`)).json();const s=(r.streams||[]).filter(z=>z.url);s.length?sheet(lbl,s.map(z=>[(z.title||z.name||'Stream').split('\n')[0],()=>{sibs=[];play(z.url,nm)}])):sheet('No direct streams (torrent-only items need a debrid add-on)',[])}catch(er){sheet('Streams unavailable',[])}};
+  if(ty=='series'){try{const mt=await(await fetch(`${a.base}/meta/series/${encodeURIComponent(id)}.json`)).json();const vs=(mt.meta.videos||[]).slice(0,200);sheet(nm,vs.map(v=>[`S${v.season}E${v.episode||v.number} ${v.title||v.name||''}`,()=>streams('series',v.id,nm)]))}catch(er){sheet('Episodes unavailable',[])}}else streams(ty,id,nm)}
+ else if(x=g('[data-ex]')){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='ftpflix-backup.json';a.click()}
+ else if(x=g('[data-im]')){const i=document.createElement('input');i.type='file';i.onchange=async()=>{try{S=Object.assign(S,JSON.parse(await i.files[0].text()));save();theme();render()}catch(er){alert('Invalid backup')}};i.click()}});
+document.addEventListener('change',e=>{const k=e.target.dataset.s;if(k){S.set[k]=e.target.value;save();theme();render()}});
+document.addEventListener('contextmenu',e=>{const c=e.target.closest('.c[data-u]');if(!c)return;e.preventDefault();const o={n:c.dataset.n,href:c.dataset.u,dir:c.dataset.d=='1'},has=S.fav.some(f=>f.href==o.href);S.fav=has?S.fav.filter(f=>f.href!=o.href):[...S.fav,o];save();render()});
+$('#q').oninput=flt;
+/* TV / keyboard navigation */
+document.addEventListener('keydown',e=>{
+ if($('#pl').classList.contains('on')&&!$('#sh').classList.contains('on')){bump();const k=e.key;
+  if(k=='Escape'||k=='Backspace'||k=='GoBack'){e.preventDefault();stop()}
+  else if(k==' '||k=='Enter'&&document.activeElement==V){e.preventDefault();V.paused?V.play():V.pause()}
+  else if(k=='ArrowRight'){e.preventDefault();V.currentTime+=10}else if(k=='ArrowLeft'){e.preventDefault();V.currentTime-=10}
+  else if(k=='ArrowUp'){e.preventDefault();V.volume=Math.min(1,V.volume+.1)}else if(k=='ArrowDown'){e.preventDefault();V.volume=Math.max(0,V.volume-.1)}
+  else if(k=='f')document.fullscreenElement?document.exitFullscreen():V.requestFullscreen();else if(k=='n')nextEp();return}
+ if(e.key=='Enter'&&document.activeElement.classList.contains('c')||e.key=='Enter'&&document.activeElement.dataset.open){document.activeElement.click();return}
+ if((e.key=='Backspace'||e.key=='Escape')&&view=='browse'&&!/INPUT/.test(document.activeElement.tagName)){nav.pop();if(nav.length)render();else{view='home';render()}return}
+ const d={ArrowRight:[1,0],ArrowLeft:[-1,0],ArrowDown:[0,1],ArrowUp:[0,-1]}[e.key];if(!d||/INPUT|SELECT/.test(document.activeElement.tagName))return;
+ const a=document.activeElement,ar=(a===document.body?{left:0,top:0,width:0,height:0}:a.getBoundingClientRect()),ax=ar.left+ar.width/2,ay=ar.top+ar.height/2;let best,bs=1e9;
+ document.querySelectorAll('.c,button,select,input,[tabindex="0"]').forEach(n=>{if(n===a||n.offsetParent===null||n.closest('#pl'))return;const r=n.getBoundingClientRect(),dx=r.left+r.width/2-ax,dy=r.top+r.height/2-ay;
+  if(d[0]&&dx*d[0]<=1||d[1]&&dy*d[1]<=1)return;const s=d[0]?Math.abs(dx)+Math.abs(dy)*3:Math.abs(dy)+Math.abs(dx)*3;if(s<bs){bs=s;best=n}});
+ if(best){e.preventDefault();best.focus();best.scrollIntoView({block:'center',inline:'nearest'})}});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))try{navigator.serviceWorker.register(URL.createObjectURL(new Blob(['onfetch=e=>{}'],{type:'text/javascript'}))).catch(()=>{})}catch(e){}
+theme();render();
+</script></body></html>
